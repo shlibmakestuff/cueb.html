@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Physics Engine Game</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #f0f0f0;
+        }
+        canvas {
+            display: block;
+            background: #ffffff;
+            margin: auto;
+            position: relative;
+        }
+        .block {
+            position: absolute;
+            background-color: grey;
+        }
+        .player {
+            position: absolute;
+            background-color: blue;
+            width: 50px;
+            height: 50px;
+        }
+        .powerup {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            display: block;
+            font-size: 24px;
+            text-align: center;
+            line-height: 30px;
+        }
+        .speedBoost {
+            background-color: yellow;
+        }
+        .jumpBoost {
+            background-color: lightblue;
+        }
+        .scoreMultiplier {
+            background-color: pink;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Player Object
+        const player = {
+            x: 375,
+            y: 550,
+            width: 50,
+            height: 50,
+            dy: 0,
+            speed: 5,
+            baseSpeed: 5,
+            jumpPower: -10,
+            isJumping: false,
+            canDoubleJump: true,
+            score: 0,
+            moveLeft: false,
+            moveRight: false,
+            scoreMultiplier: 1
+        };
+
+        // Game Objects
+        const blocks = [];
+        const powerups = [];
+        const voxels = [];
+        let blockSpeed = 2;
+
+        // Power-up types
+        const POWERUP_TYPES = ['speed', 'jump', 'score'];
+
+        // Create block
+        function createBlock() {
+            const width = Math.random() * 100 + 20;
+            const height = Math.random() * 20 + 20;
+            const x = Math.random() * (canvas.width - width);
+            blocks.push({ x, y: 0, width, height });
+        }
+
+        // Create power-up
+        function createPowerUp() {
+            const type = POWERUP_TYPES[Math.floor(Math.random() * POWERUP_TYPES.length)];
+            const x = Math.random() * (canvas.width - 30);
+            powerups.push({ x, y: 0, type });
+        }
+
+        // Update blocks
+        function updateBlocks() {
+            for (let i = 0; i < blocks.length; i++) {
+                blocks[i].y += blockSpeed;
+                if (blocks[i].y > canvas.height) {
+                    blocks.splice(i, 1);
+                    i--;
+                }
+            }
+        }
+
+        // Update power-ups
+        function updatePowerUps() {
+            for (let i = 0; i < powerups.length; i++) {
+                powerups[i].y += blockSpeed;
+                if (powerups[i].y > canvas.height) {
+                    powerups.splice(i, 1);
+                    i--;
+                }
+            }
+        }
+
+        // Check for power-up collision with player
+        function checkPowerUpCollision() {
+            for (let i = 0; i < powerups.length; i++) {
+                const p = powerups[i];
+                if (player.x < p.x + 30 &&
+                    player.x + player.width > p.x &&
+                    player.y < p.y + 30 &&
+                    player.y + player.height > p.y) {
+                    // Apply power-up effects
+                    applyPowerUp(p.type);
+                    powerups.splice(i, 1); // Remove power-up after collection
+                    i--;
+                }
+            }
+        }
+
+        // Apply power-up effect
+        function applyPowerUp(type) {
+            if (type === 'speed') {
+                player.speed = player.baseSpeed * 2; // Speed boost
+                setTimeout(() => { player.speed = player.baseSpeed; }, 5000); // Speed boost lasts 5 seconds
+            }
+            if (type === 'jump') {
+                player.jumpPower = -15; // Jump boost
+                setTimeout(() => { player.jumpPower = -10; }, 5000); // Jump boost lasts 5 seconds
+            }
+            if (type === 'score') {
+                player.scoreMultiplier = 2; // Score multiplier
+                setTimeout(() => { player.scoreMultiplier = 1; }, 5000); // Score multiplier lasts 5 seconds
+            }
+        }
+
+        // Update player movement and physics
+        function updatePlayer() {
+            if (player.moveLeft) {
+                player.x -= player.speed;
+            }
+            if (player.moveRight) {
+                player.x += player.speed;
+            }
+
+            player.y += player.dy;
+            player.dy += 0.5; // Gravity
+
+            // Prevent player from going off the screen
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+
+            // Prevent player from falling through the ground
+            if (player.y + player.height >= canvas.height) {
+                player.y = canvas.height - player.height;
+                player.dy = 0;
+                player.isJumping = false;
+                player.canDoubleJump = true; // Reset double jump
+            }
+
+            for (let i = 0; i < blocks.length; i++) {
+                const block = blocks[i];
+                if (player.x < block.x + block.width &&
+                    player.x + player.width > block.x &&
+                    player.y < block.y + block.height &&
+                    player.y + player.height > block.y) {
+                    // Collision detected, break the block into voxels
+                    destroyBlockIntoVoxels(block);
+                    blocks.splice(i, 1); // Remove block after collision
+                    player.score += player.scoreMultiplier; // Increment score with multiplier
+                    i--;
+                }
+            }
+        }
+
+        // Destroy block into voxels
+        function destroyBlockIntoVoxels(block) {
+            const numVoxels = 5;
+            for (let i = 0; i < numVoxels; i++) {
+                const voxelSize = 10;
+                const xOffset = Math.random() * block.width;
+                const yOffset = Math.random() * block.height;
+                createVoxel(block.x + xOffset, block.y + yOffset);
+            }
+        }
+
+        // Create voxel (small piece from destroyed block)
+        function createVoxel(x, y) {
+            const voxel = { x, y, size: 10, dx: Math.random() * 2 - 1, dy: Math.random() * 2 - 1 };
+            voxels.push(voxel);
+        }
+
+        // Update voxels
+        function updateVoxels() {
+            for (let i = 0; i < voxels.length; i++) {
+                const v = voxels[i];
+                v.x += v.dx;
+                v.y += v.dy;
+                v.dy += 0.1; // Apply gravity to voxels
+
+                if (v.y > canvas.height) {
+                    voxels.splice(i, 1);
+                    i--;
+                }
+            }
+        }
+
+        // Draw player
+        function drawPlayer() {
+            ctx.fillStyle = 'blue'; // Normal player color
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+        }
+
+        // Draw blocks
+        function drawBlocks() {
+            for (const block of blocks) {
+                ctx.fillStyle = 'grey';
+                ctx.fillRect(block.x, block.y, block.width, block.height);
+            }
+        }
+
+        // Draw power-ups with emojis
+        function drawPowerUps() {
+            for (const p of powerups) {
+                if (p.type === 'speed') {
+                    ctx.fillStyle = 'yellow';
+                    ctx.fillText('⚡', p.x, p.y + 20); // Speed boost emoji
+                } else if (p.type === 'jump') {
+                    ctx.fillStyle = 'lightblue';
+                    ctx.fillText('⛅', p.x, p.y + 20); // Jump boost emoji
+                } else if (p.type === 'score') {
+                    ctx.fillStyle = 'pink';
+                    ctx.fillText('💎', p.x, p.y + 20); // Score multiplier emoji
+                }
+            }
+        }
+
+        // Draw voxels
+        function drawVoxels() {
+            for (const voxel of voxels) {
+                ctx.fillStyle = 'black';
+                ctx.fillRect(voxel.x, voxel.y, voxel.size, voxel.size);
+            }
+        }
+
+        // Draw score
+        function drawScore() {
+            ctx.fillStyle = "black";
+            ctx.font = "20px Arial";
+            ctx.fillText("Score: " + player.score, 20, 30);
+        }
+
+        // Game loop
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            updatePlayer();
+            updateBlocks();
+            updatePowerUps();
+            updateVoxels();
+            checkPowerUpCollision();
+            drawPlayer();
+            drawBlocks();
+            drawPowerUps();
+            drawVoxels();
+            drawScore();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Event listeners for controls
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'w' && !player.isJumping) {
+                player.dy = player.jumpPower;
+                player.isJumping = true;
+            }
+            if (e.key === 'a') {
+                player.moveLeft = true;
+            }
+            if (e.key === 'd') {
+                player.moveRight = true;
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.key === 'a') {
+                player.moveLeft = false;
+            }
+            if (e.key === 'd') {
+                player.moveRight = false
+            }
+        });
+
+        // Initialize game
+        function init() {
+            setInterval(createBlock, 1000); // Create new blocks every 2 seconds
+            setInterval(createPowerUp, 10000); // Create a power-up every 10 seconds
+            gameLoop();
+        }
+
+        init();
+    </script>
+</body>
+</html>
